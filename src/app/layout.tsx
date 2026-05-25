@@ -1,14 +1,19 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#020617',
+};
 
 export const metadata: Metadata = {
   title: 'Nexus AI - Premium AI Platform',
   description: 'Modern AI tools and chat platform with premium experience',
   keywords: ['AI', 'Chat', 'Tools', 'Premium', 'Modern'],
   authors: [{ name: 'Nexus AI Team' }],
-  viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
-  themeColor: '#020617',
   manifest: '/manifest.json',
   icons: {
     icon: '/favicon.ico',

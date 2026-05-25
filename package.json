@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
@@ -13,14 +13,13 @@
     "db:seed": "node prisma/seed.js"
   },
   "dependencies": {
-    "next": "14.2.3",
+    "next": "14.2.25",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@prisma/client": "^5.14.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "cookies-next": "^4.2.1",
-    "node-telegram-bot-api": "^0.66.0",
     "react-hot-toast": "^2.4.1",
     "react-icons": "^5.2.1",
     "react-markdown": "^9.0.1",
@@ -30,9 +29,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "uuid": "^9.0.1",
-    "zod": "^3.23.8",
-    "helmet": "^7.1.0",
-    "express-rate-limit": "^7.2.0"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "prisma": "^5.14.0",
@@ -43,11 +40,12 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/uuid": "^9.0.8",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "tailwindcss": "^3.4.3",
     "postcss": "^8.4.38",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.3"
+    "eslint-config-next": "14.2.25"
   },
   "engines": {
     "node": ">=18.0.0"
