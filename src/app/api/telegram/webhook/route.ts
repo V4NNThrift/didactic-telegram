@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendTelegramMessage } from '@/lib/telegram';
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+export const dynamic = 'force-dynamic';
 
 interface TelegramUpdate {
   update_id: number;
@@ -26,7 +26,7 @@ interface TelegramUpdate {
 export async function POST(request: NextRequest) {
   try {
     const update: TelegramUpdate = await request.json();
-    
+
     if (!update.message || !update.message.text) {
       return NextResponse.json({ ok: true });
     }
@@ -58,10 +58,14 @@ Telegram ID Anda: <code>${userId}</code>
 <i>Butuh bantuan? Ketik /help</i>
       `.trim();
 
-      await sendTelegramMessage({
+      const sent = await sendTelegramMessage({
         chat_id: chatId,
         text: welcomeMessage,
       });
+
+      if (!sent) {
+        console.error('[Webhook] Failed to send /start reply to chat:', chatId);
+      }
 
       return NextResponse.json({ ok: true });
     }
@@ -108,40 +112,48 @@ Hubungi admin untuk bantuan lebih lanjut.
 
     // Handle /status command
     if (text === '/status') {
-      const user = await prisma.user.findUnique({
-        where: { telegramId: userId },
-        select: {
-          username: true,
-          isAdmin: true,
-          isBanned: true,
-          createdAt: true,
-          lastLoginAt: true,
-        },
-      });
+      try {
+        const user = await prisma.user.findUnique({
+          where: { telegramId: userId },
+          select: {
+            username: true,
+            isAdmin: true,
+            isBanned: true,
+            createdAt: true,
+            lastLoginAt: true,
+          },
+        });
 
-      if (!user) {
-        await sendTelegramMessage({
-          chat_id: chatId,
-          text: '❌ Akun tidak ditemukan. Silakan daftar terlebih dahulu di website.',
-        });
-      } else if (user.isBanned) {
-        await sendTelegramMessage({
-          chat_id: chatId,
-          text: '🚫 Akun Anda sedang diblokir. Hubungi admin.',
-        });
-      } else {
-        const statusMessage = `
+        if (!user) {
+          await sendTelegramMessage({
+            chat_id: chatId,
+            text: '❌ Akun tidak ditemukan. Silakan daftar terlebih dahulu di website.',
+          });
+        } else if (user.isBanned) {
+          await sendTelegramMessage({
+            chat_id: chatId,
+            text: '🚫 Akun Anda sedang diblokir. Hubungi admin.',
+          });
+        } else {
+          const statusMessage = `
 ✅ <b>Status Akun</b>
 
 👤 Username: <b>${user.username}</b>
 🔰 Role: ${user.isAdmin ? 'Admin' : 'Member'}
 📅 Terdaftar: ${user.createdAt.toLocaleDateString('id-ID')}
 🕐 Login terakhir: ${user.lastLoginAt?.toLocaleString('id-ID') || 'Belum pernah'}
-        `.trim();
+          `.trim();
 
+          await sendTelegramMessage({
+            chat_id: chatId,
+            text: statusMessage,
+          });
+        }
+      } catch (dbError) {
+        console.error('[Webhook] Database error on /status:', dbError);
         await sendTelegramMessage({
           chat_id: chatId,
-          text: statusMessage,
+          text: '⚠️ Sedang ada gangguan. Coba lagi nanti.',
         });
       }
 
@@ -158,8 +170,9 @@ Hubungi admin untuk bantuan lebih lanjut.
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('Telegram webhook error:', error);
-    return NextResponse.json({ ok: true }); // Always return ok to Telegram
+    console.error('[Webhook] Unhandled error:', error);
+    // Always return 200 to Telegram so it doesn't retry indefinitely
+    return NextResponse.json({ ok: true });
   }
 }
 

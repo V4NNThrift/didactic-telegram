@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build && npm run copy-standalone-assets",
     "copy-standalone-assets": "mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public || true",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "start": "npx prisma db push && HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
