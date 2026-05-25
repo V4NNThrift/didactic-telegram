@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { generateAIResponse, type AIMode } from '@/lib/ai-engine';
+import { generateAIResponse, type AIMode, type ChatMessage } from '@/lib/ai-provider';
 import { checkRateLimit } from '@/lib/rate-limit';
+
+export const dynamic = 'force-dynamic';
 
 // GET - Get messages for a chat
 export async function GET(
@@ -11,7 +13,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -35,7 +37,7 @@ export async function GET(
       orderBy: { createdAt: 'asc' },
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       messages,
       mode: chat.mode,
     });
@@ -52,7 +54,7 @@ export async function POST(
 ) {
   try {
     const session = await getSession();
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -61,7 +63,7 @@ export async function POST(
     const rateLimitResult = await checkRateLimit(session.userId, 'ai-chat');
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
-        { error: 'Too many requests. Please wait a moment.' },
+        { error: 'Terlalu banyak request. Tunggu sebentar.' },
         { status: 429 }
       );
     }
@@ -85,19 +87,28 @@ export async function POST(
       return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     }
 
-    // Get recent messages for context
+    // Get recent 20 messages for context
     const recentMessages = await prisma.aiMessage.findMany({
       where: { chatId: params.chatId },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      take: 20,
       select: { content: true, role: true },
     });
 
-    const context = recentMessages.reverse().map(m => m.content);
+    // Build chat history in correct order (oldest first)
+    const history: ChatMessage[] = recentMessages
+      .reverse()
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+    // Add current user message to history
+    history.push({ role: 'user', content: content.trim() });
 
     let userMessage = null;
 
-    // Create user message only if not regenerating
+    // Save user message to database (only if not regenerating)
     if (!regenerate) {
       userMessage = await prisma.aiMessage.create({
         data: {
@@ -108,11 +119,27 @@ export async function POST(
       });
     }
 
-    // Generate AI response
+    // Call real AI via OpenRouter
     const aiMode = mode as AIMode;
-    const aiResponse = await generateAIResponse(content.trim(), aiMode, context);
+    let aiResponse;
 
-    // Create assistant message
+    try {
+      aiResponse = await generateAIResponse({
+        messages: history,
+        mode: aiMode,
+      });
+    } catch (aiError: any) {
+      console.error('AI provider error:', aiError.message);
+
+      // Return user-friendly error without crashing
+      return NextResponse.json({
+        userMessage,
+        assistantMessage: null,
+        error: aiError.message || 'AI gagal merespons. Coba lagi.',
+      }, { status: 200 }); // 200 so frontend can still handle it
+    }
+
+    // Save assistant message
     const assistantMessage = await prisma.aiMessage.create({
       data: {
         chatId: params.chatId,
@@ -124,13 +151,12 @@ export async function POST(
       },
     });
 
-    // Update chat
+    // Update chat metadata
     await prisma.aiChat.update({
       where: { id: params.chatId },
       data: {
         mode: aiMode,
         updatedAt: new Date(),
-        // Update title if it's the first message
         ...(chat.title === 'New Chat' && !regenerate && {
           title: content.trim().slice(0, 50) + (content.length > 50 ? '...' : ''),
         }),
@@ -142,20 +168,20 @@ export async function POST(
       data: {
         userId: session.userId,
         mode: aiMode,
-        inputTokens: Math.ceil(content.length / 4),
-        outputTokens: aiResponse.tokens,
+        inputTokens: aiResponse.inputTokens,
+        outputTokens: aiResponse.outputTokens,
         responseMs: aiResponse.responseMs,
       },
     });
 
-    // Log activity
+    // Log activity (only on new messages, not regenerate)
     if (!regenerate) {
       await prisma.activity.create({
         data: {
           userId: session.userId,
           type: 'chat',
-          action: `Sent message in ${aiMode} mode`,
-          metadata: JSON.stringify({ chatId: params.chatId }),
+          action: `Chat (${aiMode} mode)`,
+          metadata: JSON.stringify({ chatId: params.chatId, model: aiResponse.model }),
         },
       });
     }
@@ -164,8 +190,8 @@ export async function POST(
       userMessage,
       assistantMessage,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Send message error:', error);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan server' }, { status: 500 });
   }
 }

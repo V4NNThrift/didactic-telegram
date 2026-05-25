@@ -18,7 +18,7 @@ import {
   HiOutlineEye,
   HiOutlineCheck,
 } from 'react-icons/hi';
-import { AI_MODES, type AIMode } from '@/lib/ai-engine';
+import { AI_MODES, type AIMode } from '@/lib/ai-provider';
 import Avatar from '@/components/ui/Avatar';
 import Button from '@/components/ui/Button';
 import { cn, copyToClipboard } from '@/lib/utils';
@@ -132,6 +132,18 @@ export default function ChatInterface({ chatId, onTitleChange }: ChatInterfacePr
       });
 
       const data = await response.json();
+
+      if (data.error && !data.assistantMessage) {
+        toast.error(data.error);
+        // Keep the user message in the list if it was saved
+        if (data.userMessage) {
+          setMessages(prev => [
+            ...prev.filter(m => m.id !== userMessage.id),
+            data.userMessage,
+          ]);
+        }
+        return;
+      }
 
       if (data.userMessage && data.assistantMessage) {
         setMessages(prev => [

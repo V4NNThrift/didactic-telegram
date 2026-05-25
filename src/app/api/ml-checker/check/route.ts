@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
     const checkResult = await checkMLAccount(
       userId.trim(),
       serverId.trim(),
-      `${session.userId}-${ip}`
     );
 
     // Save to database
