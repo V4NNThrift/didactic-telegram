@@ -2,10 +2,10 @@
 nixPkgs = ["nodejs-18_x"]
 
 [phases.install]
-cmds = ["npm install --legacy-peer-deps"]
+cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npx prisma generate", "npm run build"]
+cmds = ["npm run build"]
 
 [start]
-cmd = "npx prisma db push --skip-generate && npm start"
+cmd = "npm start"
