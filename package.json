@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
+    "start": "node .next/standalone/server.js",
     "lint": "next lint",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
@@ -48,6 +48,6 @@
     "eslint-config-next": "^14.2.35"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   }
 }
