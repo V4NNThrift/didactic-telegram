@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  username        String    @unique
+  passwordHash    String
+  telegramId      String    @unique
+  telegramChatId  String?
+  isAdmin         Boolean   @default(false)
+  isBanned        Boolean   @default(false)
+  banReason       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+  
+  otpCodes        OtpCode[]
+  aiChats         AiChat[]
+  notes           Note[]
+  todos           Todo[]
+  loginLogs       LoginLog[]
+  activities      Activity[]
+  aiUsageLogs     AiUsageLog[]
+  mlCheckLogs     MlCheckLog[]
+  sessions        Session[]
+
+  @@index([telegramId])
+  @@index([username])
+}
+
+model OtpCode {
+  id          String   @id @default(cuid())
+  code        String
+  telegramId  String
+  attempts    Int      @default(0)
+  isUsed      Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String?
+
+  @@index([telegramId])
+  @@index([code])
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  token       String   @unique
+  deviceInfo  String?
+  ipAddress   String?
+  userAgent   String?
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model AiChat {
+  id          String      @id @default(cuid())
+  userId      String
+  title       String      @default("New Chat")
+  isPinned    Boolean     @default(false)
+  isArchived  Boolean     @default(false)
+  mode        String      @default("smart")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    AiMessage[]
+
+  @@index([userId])
+  @@index([isPinned])
+}
+
+model AiMessage {
+  id          String   @id @default(cuid())
+  chatId      String
+  role        String   // 'user' | 'assistant'
+  content     String
+  mode        String?
+  tokens      Int?
+  responseMs  Int?
+  createdAt   DateTime @default(now())
+  
+  chat        AiChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  content     String
+  isPinned    Boolean  @default(false)
+  color       String   @default("default")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isPinned])
+}
+
+model Todo {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  isCompleted Boolean  @default(false)
+  priority    String   @default("medium") // low, medium, high
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isCompleted])
+}
+
+model LoginLog {
+  id          String   @id @default(cuid())
+  userId      String
+  ipAddress   String?
+  userAgent   String?
+  deviceInfo  String?
+  status      String   // 'success' | 'failed' | 'blocked'
+  reason      String?
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // 'login' | 'chat' | 'tool' | 'note' | 'todo' | 'ml_check'
+  action      String
+  metadata    String?  // JSON string
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model AiUsageLog {
+  id          String   @id @default(cuid())
+  userId      String
+  mode        String
+  inputTokens Int      @default(0)
+  outputTokens Int     @default(0)
+  responseMs  Int      @default(0)
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mode])
+  @@index([createdAt])
+}
+
+model MlCheckLog {
+  id           String   @id @default(cuid())
+  userId       String
+  mlUserId     String
+  mlServerId   String
+  nickname     String?
+  status       String   // 'success' | 'not_found' | 'error'
+  responseJson String?
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mlUserId])
+  @@index([createdAt])
+}
+
+model Settings {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           String
+  description     String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([key])
+}
+
+model RateLimit {
+  id          String   @id @default(cuid())
+  identifier  String   // IP or userId
+  endpoint    String
+  count       Int      @default(1)
+  resetAt     DateTime
+  createdAt   DateTime @default(now())
+
+  @@unique([identifier, endpoint])
+  @@index([identifier])
+  @@index([resetAt])
+}
