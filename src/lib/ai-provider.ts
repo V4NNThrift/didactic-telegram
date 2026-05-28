@@ -1,9 +1,19 @@
 // AI Provider - Custom endpoint (OpenAI-compatible)
-// Supports streaming and non-streaming
 
 const AI_API_URL = 'https://rn2n86j.abc-tunnel.us/v1';
 const AI_API_KEY = 'sk-e47af98ddb549389-wwcxel-07e28d37';
-const DEFAULT_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
+const DEFAULT_MODEL = 'kr/claude-haiku-4.5';
+
+// Available models on this endpoint
+export const AVAILABLE_MODELS = [
+  { id: 'kr/claude-haiku-4.5', name: 'Claude Haiku 4.5', desc: 'Cepat & ringan' },
+  { id: 'kr/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', desc: 'Pintar & detail' },
+  { id: 'kr/claude-sonnet-4.5-thinking', name: 'Claude Sonnet 4.5 (Thinking)', desc: 'Deep reasoning' },
+  { id: 'kr/deepseek-3.2', name: 'DeepSeek 3.2', desc: 'Coding & analisis' },
+  { id: 'kr/qwen3-coder-next', name: 'Qwen3 Coder Next', desc: 'Coding specialist' },
+  { id: 'kr/glm-5', name: 'GLM 5', desc: 'General purpose' },
+  { id: 'kr/MiniMax-M2.5', name: 'MiniMax M2.5', desc: 'Fast & creative' },
+];
 
 export type AIMode = 'auto';
 
@@ -56,15 +66,18 @@ export interface AIResponse {
 // Non-streaming response (for Telegram, tools, etc.)
 export async function generateAIResponse({
   messages,
-  mode,
+  model,
   maxTokens = 4096,
   temperature = 0.7,
 }: {
   messages: ChatMessage[];
+  model?: string;
   mode?: string;
   maxTokens?: number;
   temperature?: number;
 }): Promise<AIResponse> {
+  const useModel = model || DEFAULT_MODEL;
+
   const systemMessage: ChatMessage = {
     role: 'system',
     content: SYSTEM_PROMPT,
@@ -84,7 +97,7 @@ export async function generateAIResponse({
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: DEFAULT_MODEL,
+        model: useModel,
         messages: fullMessages,
         temperature,
         max_tokens: maxTokens,
@@ -98,7 +111,6 @@ export async function generateAIResponse({
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMsg = (errorData as any)?.error?.message || `API error: ${response.status}`;
-
       if (response.status === 401) throw new Error('API key tidak valid.');
       if (response.status === 429) throw new Error('Rate limit. Coba lagi dalam beberapa detik.');
       throw new Error(`AI error: ${errorMsg}`);
@@ -120,16 +132,12 @@ export async function generateAIResponse({
       inputTokens: (usage.prompt_tokens as number) || 0,
       outputTokens: (usage.completion_tokens as number) || 0,
       responseMs,
-      model: data.model || DEFAULT_MODEL,
+      model: data.model || useModel,
     };
   } catch (error: any) {
     clearTimeout(timeout);
-    if (error.name === 'AbortError') {
-      throw new Error('Timeout 60s. Coba lagi.');
-    }
-    if (error.message && !error.message.includes('fetch failed')) {
-      throw error;
-    }
+    if (error.name === 'AbortError') throw new Error('Timeout 60s. Coba lagi.');
+    if (error.message && !error.message.includes('fetch failed')) throw error;
     throw new Error('Gagal terhubung ke AI. Coba lagi nanti.');
   }
 }
@@ -137,13 +145,17 @@ export async function generateAIResponse({
 // Streaming response (for chat UI via SSE)
 export async function streamAIResponse({
   messages,
+  model,
   maxTokens = 4096,
   temperature = 0.7,
 }: {
   messages: ChatMessage[];
+  model?: string;
   maxTokens?: number;
   temperature?: number;
 }): Promise<ReadableStream<Uint8Array>> {
+  const useModel = model || DEFAULT_MODEL;
+
   const systemMessage: ChatMessage = {
     role: 'system',
     content: SYSTEM_PROMPT,
@@ -158,7 +170,7 @@ export async function streamAIResponse({
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model: useModel,
       messages: fullMessages,
       temperature,
       max_tokens: maxTokens,
@@ -172,14 +184,10 @@ export async function streamAIResponse({
     throw new Error(errorMsg);
   }
 
-  if (!response.body) {
-    throw new Error('No response body');
-  }
-
+  if (!response.body) throw new Error('No response body');
   return response.body;
 }
 
-// Helper: get system prompt for external use (Telegram AI, etc.)
 export function getSystemPrompt(): string {
   return SYSTEM_PROMPT;
 }
