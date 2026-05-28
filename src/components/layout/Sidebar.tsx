@@ -15,7 +15,6 @@ import {
   HiOutlineX,
   HiOutlineHome,
   HiOutlineShieldCheck,
-  HiOutlineDeviceMobile,
   HiOutlineCollection,
   HiOutlineSparkles,
 } from 'react-icons/hi';
@@ -32,7 +31,6 @@ const mainNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: HiOutlineHome },
   { href: '/dashboard/chat', label: 'AI Chat', icon: HiOutlineChat },
   { href: '/dashboard/tools', label: 'AI Tools', icon: HiOutlineLightningBolt },
-  { href: '/dashboard/ml-checker', label: 'ML Checker', icon: HiOutlineDeviceMobile },
   { href: '/dashboard/hub', label: 'Personal Hub', icon: HiOutlineCollection },
 ];
 

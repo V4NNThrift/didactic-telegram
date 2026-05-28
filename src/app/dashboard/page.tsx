@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { 
   HiOutlineChat, 
   HiOutlineLightningBolt, 
-  HiOutlineDeviceMobile,
   HiOutlineCollection,
   HiOutlineArrowRight,
   HiOutlineSparkles,
@@ -28,13 +27,6 @@ const quickActions = [
     title: 'AI Tools',
     description: 'Akses tools AI lengkap',
     color: 'from-purple-500 to-pink-500',
-  },
-  {
-    href: '/dashboard/ml-checker',
-    icon: HiOutlineDeviceMobile,
-    title: 'ML Checker',
-    description: 'Cek akun Mobile Legends',
-    color: 'from-orange-500 to-red-500',
   },
   {
     href: '/dashboard/hub',
