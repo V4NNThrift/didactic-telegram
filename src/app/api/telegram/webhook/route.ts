@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendTelegramMessage } from '@/lib/telegram';
-import { generateAIResponse, AVAILABLE_MODELS, type ChatMessage } from '@/lib/ai-provider';
+import { generateAIResponse, type ChatMessage } from '@/lib/ai-provider';
 
 export const dynamic = 'force-dynamic';
 
 const OWNER_ID = process.env.TELEGRAM_OWNER_ID || '';
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
-// In-memory model preferences (persists until restart)
-// In production you'd store in DB, but this works fine for Railway single-instance
-const userModelPrefs = new Map<string, string>();
 
 interface TelegramUpdate {
   update_id: number;
@@ -22,82 +16,12 @@ interface TelegramUpdate {
     date: number;
     text?: string;
   };
-  callback_query?: {
-    id: string;
-    from: { id: number; first_name: string; username?: string };
-    message: { chat: { id: number }; message_id: number };
-    data: string;
-  };
-}
-
-// Send inline keyboard
-async function sendInlineKeyboard(chatId: string, text: string, buttons: { text: string; callback_data: string }[][]) {
-  await fetch(`${TELEGRAM_API}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: buttons },
-    }),
-  });
-}
-
-// Answer callback query (dismiss loading on button)
-async function answerCallbackQuery(callbackQueryId: string, text: string) {
-  await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
-  });
-}
-
-// Edit message after button press
-async function editMessage(chatId: string, messageId: number, text: string) {
-  await fetch(`${TELEGRAM_API}/editMessageText`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      message_id: messageId,
-      text,
-      parse_mode: 'HTML',
-    }),
-  });
 }
 
 export async function POST(request: NextRequest) {
   try {
     const update: TelegramUpdate = await request.json();
 
-    // --- Handle callback query (inline button press) ---
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const userId = cb.from.id.toString();
-      const chatId = cb.message.chat.id.toString();
-      const data = cb.data;
-
-      if (data.startsWith('model:')) {
-        const selectedModel = data.slice(6);
-        const modelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel);
-
-        if (modelInfo) {
-          userModelPrefs.set(userId, selectedModel);
-
-          await answerCallbackQuery(cb.id, `✅ Model: ${modelInfo.name}`);
-          await editMessage(chatId, cb.message.message_id, 
-            `✅ Model diubah ke <b>${modelInfo.name}</b>\n\nSekarang pakai /ai untuk chat dengan model ini.`
-          );
-        } else {
-          await answerCallbackQuery(cb.id, '❌ Model tidak valid');
-        }
-      }
-
-      return NextResponse.json({ ok: true });
-    }
-
-    // --- Handle messages ---
     if (!update.message || !update.message.text) {
       return NextResponse.json({ ok: true });
     }
@@ -121,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (text === '/help') {
       await sendTelegramMessage({
         chat_id: chatId,
-        text: `📚 <b>Perintah</b>\n\n/ai [pesan] — Tanya AI\n/model — Pilih model AI\n/id — Telegram ID\n/status — Status akun\n/profile — Info profil\n/ping — Cek bot\n/help — Bantuan\n\n<b>Contoh:</b>\n<code>/ai jelaskan apa itu API</code>`,
+        text: `📚 <b>Perintah</b>\n\n/ai [pesan] — Tanya AI (MiMo v2.5 Pro)\n/id — Telegram ID\n/status — Status akun\n/profile — Info profil\n/ping — Cek bot\n/help — Bantuan\n\n<b>Contoh:</b>\n<code>/ai jelaskan apa itu API</code>\n<code>/ai buatkan kode sorting python</code>`,
       });
       return NextResponse.json({ ok: true });
     }
@@ -135,25 +59,6 @@ export async function POST(request: NextRequest) {
     // /ping
     if (text === '/ping') {
       await sendTelegramMessage({ chat_id: chatId, text: '🏓 Pong!' });
-      return NextResponse.json({ ok: true });
-    }
-
-    // /model — show inline keyboard with model list
-    if (text === '/model') {
-      const currentModel = userModelPrefs.get(telegramId) || 'kr/claude-haiku-4.5';
-      const currentInfo = AVAILABLE_MODELS.find(m => m.id === currentModel);
-
-      // Build buttons in rows of 1 (for readability)
-      const buttons = AVAILABLE_MODELS.map(m => ([{
-        text: `${m.id === currentModel ? '✅ ' : ''}${m.name}`,
-        callback_data: `model:${m.id}`,
-      }]));
-
-      await sendInlineKeyboard(
-        chatId,
-        `🤖 <b>Pilih Model AI</b>\n\nModel aktif: <b>${currentInfo?.name || currentModel}</b>\n\nPilih model di bawah:`,
-        buttons
-      );
       return NextResponse.json({ ok: true });
     }
 
@@ -190,11 +95,9 @@ export async function POST(request: NextRequest) {
         if (!user) {
           await sendTelegramMessage({ chat_id: chatId, text: '❌ Belum terdaftar.' });
         } else {
-          const currentModel = userModelPrefs.get(telegramId) || 'kr/claude-haiku-4.5';
-          const modelName = AVAILABLE_MODELS.find(m => m.id === currentModel)?.name || currentModel;
           await sendTelegramMessage({
             chat_id: chatId,
-            text: `👤 <b>${user.username}</b>\n\n🔰 ${user.isAdmin ? 'Admin' : 'Member'}\n💬 ${user._count.aiChats} chats\n🤖 Model: ${modelName}\n📅 Joined: ${user.createdAt.toLocaleDateString('id-ID')}`,
+            text: `👤 <b>${user.username}</b>\n\n🔰 ${user.isAdmin ? 'Admin' : 'Member'}\n💬 ${user._count.aiChats} chats\n🤖 Model: MiMo v2.5 Pro\n📅 Joined: ${user.createdAt.toLocaleDateString('id-ID')}`,
           });
         }
       } catch {
@@ -210,7 +113,7 @@ export async function POST(request: NextRequest) {
       if (!aiQuery) {
         await sendTelegramMessage({
           chat_id: chatId,
-          text: '💡 <code>/ai pertanyaan kamu</code>\n\nContoh: <code>/ai jelaskan machine learning</code>\n\nGanti model: /model',
+          text: '💡 <code>/ai pertanyaan kamu</code>\n\nContoh: <code>/ai jelaskan machine learning</code>',
         });
         return NextResponse.json({ ok: true });
       }
@@ -235,25 +138,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Get user's selected model
-      const selectedModel = userModelPrefs.get(telegramId) || 'kr/claude-haiku-4.5';
-      const modelName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel;
-
       // Thinking indicator
-      await sendTelegramMessage({ chat_id: chatId, text: `🤖 <i>${modelName} sedang mikir…</i>` });
+      await sendTelegramMessage({ chat_id: chatId, text: '🤖 <i>MiMo sedang berpikir…</i>' });
 
-      // Call AI
+      // Call AI with retry
       try {
         const messages: ChatMessage[] = [{ role: 'user', content: aiQuery }];
 
         const aiResponse = await generateAIResponse({
           messages,
-          model: selectedModel,
-          maxTokens: 2048,
+          maxTokens: 4096,
           temperature: 0.7,
         });
 
-        // Split long responses
+        // Split long responses (Telegram limit 4096)
         const chunks = splitMessage(aiResponse.content, 4000);
         for (const chunk of chunks) {
           await sendTelegramMessage({ chat_id: chatId, text: chunk, parse_mode: 'Markdown' });
@@ -262,7 +160,7 @@ export async function POST(request: NextRequest) {
         // Log
         if (user) {
           await prisma.activity.create({
-            data: { userId: user.id, type: 'chat', action: `Telegram AI (${modelName})` },
+            data: { userId: user.id, type: 'chat', action: 'Telegram AI (MiMo v2.5 Pro)' },
           }).catch(() => {});
         }
       } catch (err: any) {
@@ -286,7 +184,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ status: 'ok', webhook: 'active' });
+  return NextResponse.json({ status: 'ok', webhook: 'active', model: 'mimo-v2.5-pro' });
 }
 
 function splitMessage(text: string, maxLength: number): string[] {
